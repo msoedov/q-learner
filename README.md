@@ -1,5 +1,5 @@
 # q-learner
-Open ai gym q-learning for playing SpaceInvaders
+Open ai gym q-learning agent for playing SpaceInvaders
 
 ```shell
 
