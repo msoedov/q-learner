@@ -1,5 +1,5 @@
 # q-learner
-Attempt to implement q-learning agent for playing open ai SpaceInvaders
+Attempt to implement q-learning agent for playing open ai Atari SpaceInvaders
 
 ```shell
 
