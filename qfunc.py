@@ -3,6 +3,7 @@ import logging
 import pickle
 import random
 import sys
+import cv2
 from collections import defaultdict
 
 import numpy as np
@@ -22,11 +23,12 @@ class QFunc:
 
     learning_rate = 0.1
     gamma_factor = 0.9
-    epsilon = 0.4
+    epsilon = 0.1
     exploration_decay = 1.00005
 
     q_hits = 0
     all_hits = 1
+    action_variety = defaultdict(int)
 
     def __init__(self, action_space):
         self.action_space = action_space
@@ -37,7 +39,8 @@ class QFunc:
         Hashes word state of multy dim np.array into an int. Will result a low memory footprint for
         hash table
         """
-        return hash(tuple(reduce_world(state).flatten()))
+        # return hash(tuple(reduce_world(state).flatten()))
+        return reduce_state_2d(state=state)
 
     def size(self) -> int:
         return len(self.q_table)
@@ -53,11 +56,12 @@ class QFunc:
         https://en.wikipedia.org/wiki/Q-learning
         """
         q_old_state = self.q_table[self._hash_word_state(old_state)].get(
-            action, 0)  # use random to init table if value does not exists
+            action, random.randint(0, 2))
         q_new_state_max = max(self.q_table[self._hash_word_state(new_state)] or
-                              [0])
-        self.q_table[self._hash_word_state(old_state)][action] = q_old_state + self.learning_rate * \
-            (reward + self.gamma_factor * (q_new_state_max - q_old_state))
+                              [random.randint(0, 2)])
+        val = (1 - self.learning_rate) * q_old_state + self.learning_rate * \
+            (reward + self.gamma_factor * q_new_state_max)
+        self.q_table[self._hash_word_state(old_state)][action] = val
 
     def make_decision(self, state: np.array) -> None:
         """
@@ -74,8 +78,13 @@ class QFunc:
             if self.q_table[self._hash_word_state(state)]:
                 self.q_hits += 1
             self.all_hits += 1
-            action = max(self.q_table[self._hash_word_state(state)] or
-                         [self.action_space.sample()])
+            key = self._hash_word_state(state)
+            if self.q_table[key]:
+                action = max(self.q_table[key],
+                             key=lambda key: self.q_table.get(key, 0))
+            else:
+                action = self.action_space.sample()
+            self.action_variety[action] += 1
             return action
 
     def hit_ratio(self) -> float:
@@ -85,12 +94,44 @@ class QFunc:
         return min((1 - self.epsilon) * 100, 100)
 
 
-def reduce_world(data, rows=60, cols=120):
-    data = data.reshape([210, 160 * 3])
+def reduce_world(data, rows=60, cols=120, reshape=True):
+    if reshape:
+        data = data.reshape([210, 160 * 3])
     row_sp = data.shape[0] // rows
     col_sp = data.shape[1] // cols
     tmp = np.sum(data[i::row_sp] for i in range(row_sp))
     return np.sum(tmp[:, i::col_sp] for i in range(col_sp))
+
+
+def preprocess(observation: np.array) -> np.array:
+    """
+    Transform 265 x 160 x 3 -> 84 x 84 x 1 world
+    """
+
+    observation = cv2.cvtColor(
+        cv2.resize(observation, (84, 110)), cv2.COLOR_BGR2GRAY)
+    observation = observation[26:110, :]
+    ret, observation = cv2.threshold(observation, 1, 255, cv2.THRESH_BINARY)
+    return np.reshape(observation, (84, 84, 1))
+
+
+def reduce_state_2d(state):
+    """
+    Dummy method to detect positions of ship, bullet and enemy ships
+    """
+    ship = preprocess(state)[68:75]
+    obstacles = preprocess(state)[50:55]
+    enemy = preprocess(state)[40:50]
+    obstacles_arg = np.argmax(reduce_world(obstacles, 1, 84, reshape=False).T)
+    ship_arg = np.argmax(reduce_world(ship, 1, 84, reshape=False).T)
+    enemy_arg = np.argmax(reduce_world(enemy, 1, 84, reshape=False).T)
+    return ship_arg, enemy_arg, obstacles_arg
+
+
+def snaphot(world):
+    import matplotlib.pylab as plt
+    plt.imshow(np.array(np.squeeze(world)))
+    plt.show()
 
 
 def train():
@@ -114,6 +155,8 @@ def train():
         print("Exploration probability {:.1f}%".format(
             q_learner.exploration_factor()))
         print("Qs memory hit", q_learner.hit_ratio())
+        print("Action Variety", q_learner.action_variety)
+        q_learner.action_variety = defaultdict(int)
         all_time_max = max(all_time_max, max_score)
         max_score = 0
         lives = 3
@@ -125,8 +168,8 @@ def train():
             new_lives = info['ale.lives']
             if new_lives < lives:
                 lives = new_lives
-                penalty = 10
-            q_reward = (reward if not done else -1) - penalty
+                penalty = 20
+            q_reward = reward - penalty
             q_learner.learn(
                 old_state=state_,
                 action=action,
