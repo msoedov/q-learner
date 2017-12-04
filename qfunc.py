@@ -27,6 +27,7 @@ class QFunc:
 
     q_hits = 0
     all_hits = 1
+
     def __init__(self, action_space):
         self.action_space = action_space
         self.q_table = defaultdict(dict)
@@ -36,8 +37,7 @@ class QFunc:
         Hashes word state of multy dim np.array into an int. Will result a low memory footprint for
         hash table
         """
-
-        return hash(tuple(state.flatten()))
+        return hash(tuple(reduce_word(state).flatten()))
 
     def size(self) -> int:
         return len(self.q_table)
@@ -81,6 +81,18 @@ class QFunc:
     def hit_ration(self) -> float:
         return self.q_hits / self.all_hits
 
+    def exploration_factor(self) -> float:
+        return min((1 - self.epsilon) * 100, 100)
+
+
+def reduce_word(data, rows=60, cols=120):
+    data = data.reshape([210, 160 * 3])
+    row_sp = data.shape[0] // rows
+    col_sp = data.shape[1] // cols
+    tmp = np.sum(data[i::row_sp] for i in range(row_sp))
+    return np.sum(tmp[:, i::col_sp] for i in range(col_sp))
+
+
 def train():
     env = gym.make('SpaceInvaders-v0')
     outdir = '/tmp/q-space-func'
@@ -99,11 +111,9 @@ def train():
         print("Max score", all_time_max)
         print("Game number #", i)
         print("Observed states", q_learner.size())
-        print("Exploration factor {:.1f}%".format((1 - q_learner.epsilon) *
-                                                  100))
-        print("Q function decisions factor {:.1f}%".format((q_learner.epsilon)
-                                                           * 100))
-        print("Qs hit", q_learner.hit_ration())
+        print("Exploration probability {:.1f}%".format(
+            q_learner.exploration_factor()))
+        print("Qs memory hit", q_learner.hit_ration())
         all_time_max = max(all_time_max, max_score)
         max_score = 0
         while True:
