@@ -37,7 +37,7 @@ class QFunc:
         Hashes word state of multy dim np.array into an int. Will result a low memory footprint for
         hash table
         """
-        return hash(tuple(reduce_word(state).flatten()))
+        return hash(tuple(reduce_world(state).flatten()))
 
     def size(self) -> int:
         return len(self.q_table)
@@ -78,14 +78,14 @@ class QFunc:
                          [self.action_space.sample()])
             return action
 
-    def hit_ration(self) -> float:
+    def hit_ratio(self) -> float:
         return self.q_hits / self.all_hits
 
     def exploration_factor(self) -> float:
         return min((1 - self.epsilon) * 100, 100)
 
 
-def reduce_word(data, rows=60, cols=120):
+def reduce_world(data, rows=60, cols=120):
     data = data.reshape([210, 160 * 3])
     row_sp = data.shape[0] // rows
     col_sp = data.shape[1] // cols
@@ -113,7 +113,7 @@ def train():
         print("Observed states", q_learner.size())
         print("Exploration probability {:.1f}%".format(
             q_learner.exploration_factor()))
-        print("Qs memory hit", q_learner.hit_ration())
+        print("Qs memory hit", q_learner.hit_ratio())
         all_time_max = max(all_time_max, max_score)
         max_score = 0
         lives = 3
