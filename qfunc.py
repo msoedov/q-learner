@@ -22,9 +22,11 @@ class QFunc:
 
     learning_rate = 0.1
     gamma_factor = 0.9
-    epsilon = 0.1
+    epsilon = 0.4
     exploration_decay = 1.00005
 
+    q_hits = 0
+    all_hits = 1
     def __init__(self, action_space):
         self.action_space = action_space
         self.q_table = defaultdict(dict)
@@ -51,11 +53,11 @@ class QFunc:
         https://en.wikipedia.org/wiki/Q-learning
         """
         q_old_state = self.q_table[self._hash_word_state(old_state)].get(
-            action, random.randint(1, 10))  # use random to init table if value does not exists
+            action, 0)  # use random to init table if value does not exists
         q_new_state_max = max(self.q_table[self._hash_word_state(new_state)] or
-                              [random.randint(1, 10)])
+                              [0])
         self.q_table[self._hash_word_state(old_state)][action] = q_old_state + self.learning_rate * \
-            (reward + self.gamma_factor * q_new_state_max - q_old_state)
+            (reward + self.gamma_factor * (q_new_state_max - q_old_state))
 
     def make_decision(self, state: np.array) -> None:
         """
@@ -69,10 +71,15 @@ class QFunc:
         if random.random() > self.epsilon:
             return self.action_space.sample()
         else:
+            if self.q_table[self._hash_word_state(state)]:
+                self.q_hits += 1
+            self.all_hits += 1
             action = max(self.q_table[self._hash_word_state(state)] or
                          [self.action_space.sample()])
             return action
 
+    def hit_ration(self) -> float:
+        return self.q_hits / self.all_hits
 
 def train():
     env = gym.make('SpaceInvaders-v0')
@@ -96,6 +103,7 @@ def train():
                                                   100))
         print("Q function decisions factor {:.1f}%".format((q_learner.epsilon)
                                                            * 100))
+        print("Qs hit", q_learner.hit_ration())
         all_time_max = max(all_time_max, max_score)
         max_score = 0
         while True:
@@ -105,12 +113,13 @@ def train():
             q_learner.learn(
                 old_state=state_,
                 action=action,
-                reward=reward,
+                reward=reward if not done else -1,
                 new_state=state)
             max_score += reward
             if done:
                 break
-            # env.render()
+            if q_learner.epsilon > 0.5:
+                env.render()
     with open('qfunc.pickle', 'wb') as handle:
         pickle.dump(q_learner, handle, protocol=pickle.HIGHEST_PROTOCOL)
     env.close()
