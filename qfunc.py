@@ -116,14 +116,21 @@ def train():
         print("Qs memory hit", q_learner.hit_ration())
         all_time_max = max(all_time_max, max_score)
         max_score = 0
+        lives = 3
         while True:
             action = q_learner.make_decision(state)
             state_ = state
-            state, reward, done, _ = env.step(action)
+            state, reward, done, info = env.step(action)
+            penalty = 0
+            new_lives = info['ale.lives']
+            if new_lives < lives:
+                lives = new_lives
+                penalty = 10
+            q_reward = (reward if not done else -1) - penalty
             q_learner.learn(
                 old_state=state_,
                 action=action,
-                reward=reward if not done else -1,
+                reward=q_reward,
                 new_state=state)
             max_score += reward
             if done:
