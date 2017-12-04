@@ -34,12 +34,11 @@ class QFunc:
         self.action_space = action_space
         self.q_table = defaultdict(dict)
 
-    def _hash_word_state(self, state: np.array) -> int:
+    def _hash_word_state(self, state: np.array) -> (int, int, int):
         """
         Hashes word state of multy dim np.array into an int. Will result a low memory footprint for
-        hash table
+        hash table representation of state history
         """
-        # return hash(tuple(reduce_world(state).flatten()))
         return reduce_state_2d(state=state)
 
     def size(self) -> int:
@@ -63,7 +62,7 @@ class QFunc:
             (reward + self.gamma_factor * q_new_state_max)
         self.q_table[self._hash_word_state(old_state)][action] = val
 
-    def make_decision(self, state: np.array) -> None:
+    def make_decision(self, state: np.array) -> int:
         """
         Decides which action to take.
 
@@ -72,26 +71,27 @@ class QFunc:
         """
 
         self.epsilon = self.exploration_decay * self.epsilon
+        # Random action with prob (1 - self.epsilon)
         if random.random() > self.epsilon:
             return self.action_space.sample()
+
+        if self.q_table[self._hash_word_state(state)]:
+            self.q_hits += 1
+        self.all_hits += 1
+        key = self._hash_word_state(state)
+        if self.q_table[key]:
+            action = max(self.q_table[key],
+                         key=lambda key: self.q_table.get(key, 0))
         else:
-            if self.q_table[self._hash_word_state(state)]:
-                self.q_hits += 1
-            self.all_hits += 1
-            key = self._hash_word_state(state)
-            if self.q_table[key]:
-                action = max(self.q_table[key],
-                             key=lambda key: self.q_table.get(key, 0))
-            else:
-                action = self.action_space.sample()
-            self.action_variety[action] += 1
-            return action
+            action = self.action_space.sample()
+        self.action_variety[action] += 1
+        return action
 
     def hit_ratio(self) -> float:
         return self.q_hits / self.all_hits
 
     def exploration_factor(self) -> float:
-        return min((1 - self.epsilon) * 100, 100)
+        return max(min((1 - self.epsilon) * 100, 100), 0)
 
 
 def reduce_world(data, rows=60, cols=120, reshape=True):
@@ -115,7 +115,7 @@ def preprocess(observation: np.array) -> np.array:
     return np.reshape(observation, (84, 84, 1))
 
 
-def reduce_state_2d(state):
+def reduce_state_2d(state: np.array) -> (int, int, int):
     """
     Dummy method to detect positions of ship, bullet and enemy ships
     """
